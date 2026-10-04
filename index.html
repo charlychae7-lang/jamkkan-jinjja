@@ -573,7 +573,7 @@ var DB=store.get()||{};
 if(!DB.records)DB.records=[]; if(!DB.canvas)DB.canvas={};
 /* 사고 디버깅 상태 */
 var DSTEPS=['문제 고르기','문제 정의','의식구조','다섯 질문','재해석','작은 실험'];
-function blankD(){return {s0:'issue',started:false,pause:false,step:0,issue:'',thought:'',source:'',def:null,pats:null,picked:[],dbg:null,ans:{},rf:null,exp:null,ex:{pred:'',real:'',found:''},busy:false,err:''}}
+function blankD(){return {offline:false,s0:'issue',started:false,pause:false,step:0,issue:'',thought:'',source:'',def:null,pats:null,picked:[],dbg:null,ans:{},rf:null,exp:null,ex:{pred:'',real:'',found:''},busy:false,err:''}}
 var D=Object.assign(blankD(),DB.dbg||{});
 D.busy=false;D.pause=false;D.err='';if(!D.ans)D.ans={};if(!D.ex)D.ex={pred:'',real:'',found:''};if(!D.picked)D.picked=[];
 D.started=D.step>0; 
@@ -607,12 +607,79 @@ function errText(e){
 }
 function ctx(){return '사회문제: '+D.issue+(D.thought.trim()?'\n사용자의 자동적인 생각: '+D.thought:'')}
 
+
+/* ---------- 오프라인 안내 모드: AI를 쓸 수 없을 때(GitHub 등)도 6단계가 끊기지 않도록 ---------- */
+var OFFDEF={
+ '저출생':{d:'출생아 수가 줄어드는 현상입니다. 아이를 낳고 기르는 일을 둘러싼 주거, 일자리, 돌봄, 교육의 부담과 불안이 한꺼번에 얽혀 있는 문제로 볼 수 있습니다.',f:['출생아 수와 합계출산율이 오랫동안 낮은 수준에 머물러 있다.','결혼과 출산 시기가 늦어지고 있다.','양육 비용과 돌봄 부담에 대한 인식이 크다.'],c:['주거비와 일자리 불안정','장시간 노동과 일·돌봄 양립의 어려움','교육 경쟁과 양육 비용 부담'],s:[['청년·예비 부모','삶의 안정과 선택의 자유'],['기업·일터','인력 확보와 일하는 방식'],['지자체·정부','인구 구조와 재정, 정책 설계'],['아이와 다음 세대','자라날 환경과 기회']],fr:['개인의 선택 문제','경제 문제','국가 위기']},
+ '초고령사회와 노인의 빈곤·고립':{d:'고령 인구가 빠르게 늘면서 노인의 소득, 건강, 관계, 역할이 함께 흔들리는 문제입니다. 돌봄 대상으로만 보는 시선이 노인의 사회적 역할을 좁히고 있는지도 함께 볼 필요가 있습니다.',f:['고령 인구 비중이 해마다 커지고 있다.','혼자 사는 노인 가구가 늘고 있다.','노후 소득의 격차가 크다.'],c:['연금·노후 소득 구조','일자리와 사회적 역할의 단절','지역 돌봄과 관계망 부족'],s:[['노인 당사자','존엄, 소득, 관계, 역할'],['가족','돌봄 부담과 거리'],['지역사회·복지기관','돌봄 체계와 자원'],['청년·미래 세대','부양 부담과 연대']],fr:['복지 비용 문제','가족 책임','세대 갈등']},
+ '청년 일자리와 불평등':{d:'청년이 안정적인 일자리와 첫 기회를 얻기 어려워지고, 출발선의 차이가 이후의 삶까지 이어지는 문제입니다.',f:['청년 비정규직과 불안정 노동이 존재한다.','부모의 자산과 지역에 따른 기회의 차이가 있다.','일자리 수요와 청년이 원하는 일 사이에 불일치가 있다고 이야기된다.'],c:['노동시장의 이중 구조','교육과 일자리의 연결 부족','주거와 자산 격차'],s:[['청년','첫 일자리와 자립'],['기업','인재와 비용'],['교육기관','교육과 현장의 연결'],['정부·지자체','고용 정책과 안전망']],fr:['눈높이 문제','공정성 문제','세대 갈등']},
+ '지역소멸':{d:'인구가 줄고 청년이 떠나면서 지역의 일자리, 학교, 병원, 상점, 공동체가 함께 약해지는 문제입니다. 수도권 집중과 지역 안의 순환이 끊긴 구조가 겹쳐 있습니다.',f:['비수도권 일부 지역에서 인구가 줄고 있다.','청년의 수도권 이동이 이어지고 있다.','빈집, 폐교, 상점 감소가 관찰된다.'],c:['일자리·교육·의료의 수도권 집중','지역에서 번 돈이 지역 안에서 돌지 않는 구조','남은 사람들 사이의 관계망과 역할 약화'],s:[['지역 주민','생활 기반과 삶의 터전'],['청년','일과 배움의 기회'],['지자체','재정과 정책'],['지역 기업·상인','일감과 소비']],fr:['어쩔 수 없는 흐름','재정 지원 문제','개발의 문제']},
+ 'AI 대전환과 일자리·정체성 상실':{d:'AI가 일의 방식을 바꾸면서 일자리뿐 아니라 “나는 무엇을 하는 사람인가”라는 정체성과 쓸모의 감각이 흔들리는 문제입니다.',f:['AI 도구가 업무에 빠르게 도입되고 있다.','일부 업무는 자동화되고 새로운 업무도 생긴다.','세대와 직업에 따라 체감이 크게 다르다.'],c:['기술 변화의 속도와 재교육 기회의 격차','일을 곧 정체성으로 여기는 사회적 전제','전환기의 안전망과 역할 부족'],s:[['일하는 사람','소득과 정체성'],['기업','생산성과 인력 구조'],['교육기관','배움의 방식'],['정부·지자체','전환 지원과 제도']],fr:['대체 위협','생산성 혁명','세대 격차']},
+ '교육 경쟁':{d:'아이들이 배움 자체보다 비교와 순위, 입시를 위해 경쟁하게 되는 문제입니다. 개별 가정의 선택과 사회 구조가 서로를 강화하는 구조로 볼 수 있습니다.',f:['사교육 참여와 비용 부담이 크다.','입시 결과가 이후의 진로에 큰 영향을 미친다고 여겨진다.','학생의 학습 부담과 스트레스가 이야기된다.'],c:['대학 서열과 노동시장 구조','불안이 만드는 각자도생','평가가 서열 중심으로 설계된 구조'],s:[['학생','배움과 건강'],['학부모','불안과 비용'],['교사·학교','교육의 본래 역할'],['사회·기업','인재 선발 방식']],fr:['공정한 경쟁','부모의 욕심','입시 제도 문제']},
+ '갈등과 혐오':{d:'서로 다른 입장의 사람들이 상대를 이해 대상이 아니라 적으로 보게 되면서 갈등과 혐오가 커지는 문제입니다.',f:['온라인에서 극단적인 표현이 빠르게 퍼진다.','집단 간 신뢰가 낮다는 인식이 있다.','같은 사실을 다르게 해석하는 일이 잦다.'],c:['알고리즘과 확증편향','불안과 불평등에서 오는 상대적 박탈감','대화와 중재의 구조 부족'],s:[['시민','안전한 대화와 존중'],['언론·플랫폼','정보 유통과 책임'],['정치·행정','갈등 조정'],['소수자·취약 집단','안전과 존엄']],fr:['가치관의 차이','정치 문제','개인의 인성 문제']},
+ '기후위기':{d:'기후 변화로 폭염, 홍수, 가뭄 같은 위험이 커지고, 에너지와 산업, 생활 방식의 전환이 필요해진 문제입니다. 개인의 실천과 구조의 전환이 함께 필요합니다.',f:['기상이변과 폭염이 늘고 있다고 보고된다.','탄소 배출을 줄이는 국제적 노력이 진행 중이다.','피해는 취약 계층과 지역에 더 크게 나타난다.'],c:['화석연료 중심의 에너지·산업 구조','편리함과 소비 중심의 생활 방식','장기 비용을 가격에 반영하지 못하는 시장'],s:[['시민','안전한 환경과 생활 비용'],['기업','전환 비용과 경쟁력'],['정부','정책과 국제 협력'],['다음 세대','살아갈 지구']],fr:['개인 실천 문제','경제 성장과의 충돌','국가 간 책임']}
+};
+function offDef(){
+ var o=OFFDEF[D.issue],I=D.issue;
+ if(o) return {definition:o.d,facts:o.f,causes:o.c,stakeholders:o.s.map(function(x){return{who:x[0],stake:x[1]}}),frames:o.fr};
+ return {definition:'“'+I+'”은(는) 하나의 원인으로 설명되기 어려운 문제입니다. 누가 어떤 어려움을 겪고 있는지, 그 어려움을 만드는 구조는 무엇인지부터 차분히 나누어 보는 것이 이 단계의 목적입니다.',
+  facts:['이 문제를 직접 겪는 사람들이 있다. (누구인지 적어 보세요)','통계나 보도로 확인할 수 있는 내용이 있다. (출처를 찾아 보세요)','지역과 세대에 따라 체감이 다르다.'],
+  causes:['제도와 규칙에서 오는 원인','경제·일자리·주거 같은 조건에서 오는 원인','관계와 문화, 통념에서 오는 원인'],
+  stakeholders:[{who:'직접 겪는 당사자',stake:'삶의 안정과 존엄'},{who:'가족과 이웃',stake:'함께 지는 부담과 관계'},{who:'기관과 기업',stake:'역할과 책임, 비용'},{who:'정부·지자체',stake:'제도와 정책 설계'}],
+  frames:['개인의 책임 문제','경제나 비용의 문제','어쩔 수 없는 흐름']};
+}
+function offPats(){
+ var I=D.issue;
+ return {patterns:[
+  {name:'개인 책임론',autoThought:I+'은(는) 결국 각자 알아서 해결해야 할 일이다.',hiddenPremise:'문제는 개인의 노력과 선택으로 풀린다.',hidden:'개인이 놓인 구조와 조건의 차이'},
+  {name:'경쟁·효율 중심',autoThought:'비용과 효과를 따지면 어쩔 수 없는 선택이다.',hiddenPremise:'효율이 가장 중요한 기준이다.',hidden:'효율로 계산되지 않는 사람의 존엄과 관계'},
+  {name:'쓸모와 생산성',autoThought:'사회에 쓸모가 있어야 인정받는다.',hiddenPremise:'사람의 가치는 생산성으로 잴 수 있다.',hidden:'쓸모를 증명하지 않아도 존재하는 가치'},
+  {name:'어쩔 수 없다는 체념',autoThought:'원래 그랬고 앞으로도 바뀌기 어렵다.',hiddenPremise:'지금의 구조는 바뀌지 않는다.',hidden:'작은 실험으로 바꿀 수 있는 여지'}
+ ],mirror:'내가 쓴 생각은 위의 틀 중 어디와 가장 가까운가요? 그 틀은 무엇을 보이게 하고, 무엇을 보이지 않게 하나요?'};
+}
+function offDbg(){
+ var T=D.thought||D.issue;
+ return {anchor:T,
+  q1:{fact:['내가 직접 보고 겪어서 확인한 것','통계나 믿을 만한 자료로 확인된 것'],interp:['“그래서 결국 ~이다”라고 결론 내린 부분','내가 상대의 속마음을 짐작한 부분'],poss:['예외가 되는 사례가 있을 수 있다','시간이 지나면 달라질 수 있다','내가 보지 못한 원인이 더 있을 수 있다'],ask:'이 생각 중 확인된 사실은 어디까지이고, 해석은 어디부터일까요?'},
+  q2:{premises:['이 문제는 한 가지 원인으로 설명된다','지금의 방식이 유일한 방식이다','내가 속한 입장이 기준이다'],ask:['이 생각이 맞으려면 반드시 참이어야 하는 것은 무엇인가요?','그 전제가 사실이 아니라면 생각은 어떻게 달라질까요?']},
+  q3:{chain:[{label:'사건',text:'이 문제를 떠올린 계기'},{label:'생각',text:T.slice(0,24)},{label:'근거',text:'내가 믿는 이유'},{label:'전제',text:'당연하다고 여긴 것'},{label:'경험',text:'비슷했던 지난 일'},{label:'신념',text:'오래 가져온 믿음'}],ask:['이 생각은 언제, 어떤 경험에서 처음 생겼나요?','누구에게 배웠거나 어디서 자주 들은 생각인가요?']},
+  q4:{views:[{who:'나',ask:'지금의 내 입장에서는 이 문제가 어떻게 보이나요?'},{who:'상대방',ask:'이 문제를 다르게 보는 사람은 무엇을 걱정할까요?'},{who:'제3자',ask:'아무 이해관계가 없는 사람이 보면 무엇이 눈에 들어올까요?'},{who:'공동체',ask:'우리 모두에게는 어떤 영향이 있을까요?'},{who:'5년 후의 나',ask:'5년 뒤 이 생각을 돌아본다면 뭐라고 말할까요?'},{who:'AI',ask:'AI에게 이 생각의 맹점을 찾아 달라고 한다면 무엇을 물을까요?'}]},
+  q5:{ask:['이 질문들을 거친 뒤, 내가 새로 선택하고 싶은 생각이나 태도는 무엇인가요?','오늘 할 수 있는 아주 작은 행동은 무엇인가요?']}};
+}
+function offRf(){
+ var a=D.ans||{},I=D.issue,T=D.thought||I;
+ return {before:'“'+T+'”라는 하나의 틀로 이 문제를 보고 있었다.',
+  after:'이 생각은 하나의 해석일 수 있고, '+I+'은(는) 사람과 구조와 관계가 함께 만든 문제로 볼 수도 있다.',
+  reframe:'처음의 생각은 나의 경험에서 나온 자연스러운 해석입니다. 다만 그것을 사실로 단정하면 다른 가능성이 보이지 않게 됩니다. '+(a.q1?'내가 직접 적은 사실과 해석의 구분을 이어서, ':'')+'이 문제를 개인의 탓으로만 보지 않고 사람, 구조, 관계가 어떻게 이어져 있는지 함께 살피면 새로운 선택지가 열립니다.'+(a.q5?' 내가 쓴 선택은 그 시작점이 될 수 있습니다.':''),
+  opened:['원인을 한 가지로 단정하지 않게 된다','비난 대신 구조를 바꾸는 질문이 가능해진다','작은 실험으로 확인해 볼 수 있다'],
+  personal:['생각을 사실과 해석으로 나누어 적어 본다','다른 입장의 사람에게 이야기를 물어본다','오늘 하나의 작은 행동을 정해 해 본다'],
+  community:['문제를 이야기하는 방식을 비난에서 질문으로 바꾼다','서로 다른 입장을 가진 사람이 함께 모이는 자리를 만든다','작은 규모의 실험을 만들어 결과를 공유한다'],
+  keepAsking:'내가 지금 믿는 이 생각은, 정말 내가 선택한 생각일까요?'};
+}
+function offExp(){
+ var rf=D.rf||{},q=(D.ans&&D.ans.q5)||'';
+ return {action:q?('내가 적은 선택을 오늘 10분 안에 해볼 수 있는 가장 작은 행동으로 바꿔 실행해 본다.'):'이 문제에 대해 나와 다른 생각을 가진 사람 한 명의 이야기를 10분 동안 비판 없이 들어 본다.',
+  why:'내 생각이 사실인지 해석인지 직접 확인해 보는 실험입니다.',predict:'행동하기 전에, 어떤 일이 생길 것 같은지 적어 보세요.',observe:'행동하는 동안 내 몸과 마음의 반응, 그리고 상대나 상황의 반응을 관찰해 보세요.'};
+}
+function offlineFill(kind,e){
+ if(!e||e.code!=='unavailable')return false;
+ try{
+  if(kind==='def'){D.def=offDef()}
+  else if(kind==='pats'){D.pats=offPats();D.picked=[];D.patsFor=D.thought}
+  else if(kind==='dbg'){D.dbg=offDbg();D.ans={}}
+  else if(kind==='rf'){D.rf=offRf()}
+  else if(kind==='exp'){D.exp=offExp()}
+  D.offline=true;D.err='';return true;
+ }catch(x){return false}
+}
+function offNote(){return D.offline?'<div class="note" style="padding:8px 12px;background:var(--soft);border-radius:10px">안내 모드 · 지금은 AI 없이 기본 질문과 틀로 진행합니다. 아래 질문에 직접 답하며 따라가면 됩니다.</div>':''}
+
 /* ---------- 단계별 호출 ---------- */
 async function doDefine(){
  D.busy=true;D.err='';render();
  try{
   D.def=await ask(ctx()+'\n\n이 사회문제를 먼저 정의해 주세요. 다음 JSON 형식으로만 답하세요.\n{"definition":"문제를 2~3문장으로 정의","facts":["확인 가능한 사실 3~4개"],"causes":["구조적 원인 3개"],"stakeholders":[{"who":"이해관계자","stake":"걸려 있는 것 한 문장"}],"frames":["이 문제를 흔히 이야기하는 프레임 3개"]} stakeholders는 4개.');
- }catch(e){D.err=errText(e)}
+ }catch(e){if(!offlineFill('def',e))D.err=errText(e)}
  D.busy=false;save();render();
 }
 async function doPatterns(){
@@ -620,7 +687,7 @@ async function doPatterns(){
  try{
   D.pats=await ask(ctx()+'\n문제 정의 요약: '+(D.def&&D.def.definition||'')+'\n\n이 문제를 대할 때 우리 사회와 개인에게 자동으로 작동하는 의식구조(통념)를 4개 찾아 주세요. 예: 개인 책임론, 세대 갈등 프레임, 경쟁과 효율 중심 사고, 성장 지상주의, 쓸모와 생산성으로 사람을 재는 전제, 일자리가 곧 정체성이라는 전제. 이 문제에 맞는 것을 고르세요. 다음 JSON으로만 답하세요.\n{"patterns":[{"name":"의식구조 이름(10자 안팎)","autoThought":"이 구조가 만드는 자동생각을 따옴표 없이 한 문장으로","hiddenPremise":"그 밑에 깔린 전제 한 문장","hidden":"이 구조 때문에 잘 보이지 않게 되는 것 한 문장"}],"mirror":"사용자가 쓴 자동적인 생각이 위 패턴 중 어디에 가까운지 스스로 살피도록 돕는 질문 한 개"}');
   D.picked=[];D.patsFor=D.thought;
- }catch(e){D.err=errText(e)}
+ }catch(e){if(!offlineFill('pats',e))D.err=errText(e)}
  D.busy=false;save();render();
 }
 async function doDebug(){
@@ -634,7 +701,7 @@ async function doDebug(){
   '"q4":{"views":[{"who":"나","ask":""},{"who":"상대방","ask":""},{"who":"제3자","ask":""},{"who":"공동체","ask":""},{"who":"5년 후의 나","ask":""},{"who":"AI","ask":"AI에게 이 생각의 맹점을 찾아 달라고 한다면 무엇을 물을지"}]},'+
   '"q5":{"ask":["그렇다면 무엇을 선택할지 묻는 질문 2개"]}} q3.chain은 가설이라 짧게 쓰세요(각 20자 안팎). q4.views의 ask는 각 관점에서 어떻게 보일지 묻는 질문 한 개.');
   D.ans={};
- }catch(e){D.err=errText(e)}
+ }catch(e){if(!offlineFill('dbg',e))D.err=errText(e)}
  D.busy=false;save();render();
 }
 async function doReframe(){
@@ -643,7 +710,7 @@ async function doReframe(){
  var picked=D.picked.map(function(i){return D.pats&&D.pats.patterns[i]?D.pats.patterns[i].name+'('+D.pats.patterns[i].hiddenPremise+')':''}).filter(Boolean).join('; ');
  try{
   D.rf=await ask(ctx()+'\n공감한 의식구조: '+(picked||'없음')+'\n검토한 생각: '+(dbg.anchor||'')+'\n사용자의 답변:\n- 사실/해석/가능성: '+(a.q1||'(비어 있음)')+'\n- 숨은 전제: '+(a.q2||'(비어 있음)')+'\n- 생각의 뿌리: '+(a.q3||'(비어 있음)')+'\n- 관점 전환: '+['나','상대방','제3자','공동체','5년 후','AI'].map(function(w,i){return w+': '+(a['v'+i]||'-')}).join(' / ')+'\n- 선택하고 싶은 것: '+(a.q5||'(비어 있음)')+'\n\n사용자 자신의 답변을 최대한 살려서, 자동화된 의식구조를 새로운 관점으로 다시 해석해 주세요. 비어 있는 부분은 억지로 채우지 마세요. 다음 JSON으로만 답하세요.\n{"before":"기존의 의식구조를 한 문장","after":"새로 열어 볼 해석을 한 문장","reframe":"재해석을 3~4문장","opened":["닫혀 있던 가능성이 열리는 지점 3개"],"personal":["개인 차원의 새로운 선택지 3개"],"community":["공동체·사회 차원의 새로운 선택지 3개"],"keepAsking":"계속 품고 갈 질문 한 개"}');
- }catch(e){D.err=errText(e)}
+ }catch(e){if(!offlineFill('rf',e))D.err=errText(e)}
  D.busy=false;save();render();
 }
 async function doExperiment(){
@@ -651,7 +718,7 @@ async function doExperiment(){
  var rf=D.rf||{};
  try{
   D.exp=await ask(ctx()+'\n새로 열어 볼 해석: '+(rf.after||'')+'\n사용자가 선택하고 싶다고 쓴 것: '+(D.ans.q5||'(비어 있음)')+'\n\n하루 안에, 10분 안팎으로 해볼 수 있는 작은 행동 실험 하나를 제안해 주세요. 다음 JSON으로만 답하세요.\n{"action":"작은 행동 한 문장","why":"이 행동이 어떤 생각을 확인해 주는지 한 문장","predict":"예상 칸에 무엇을 적으면 좋은지 안내 한 문장","observe":"행동하는 동안 관찰할 것 한 문장"}');
- }catch(e){D.err=errText(e)}
+ }catch(e){if(!offlineFill('exp',e))D.err=errText(e)}
  D.busy=false;save();render();
 }
 
@@ -711,7 +778,7 @@ function v1(){
  if(!D.def) return '<div class="card"><h2>'+esc(D.issue)+'</h2>'+dErr('define')+dNav(true,'','')+'</div>';
  var d=D.def,ex=issueEx(),ok=D.thought.trim().length>3;
  var sh=(d.stakeholders||[]).map(function(s){return '<div class="box"><b>'+esc(s.who)+'</b>'+esc(s.stake)+'</div>'}).join('');
- return '<div class="card"><div class="sec"><div class="eyebrow">먼저 문제부터</div><h2>'+esc(D.issue)+'</h2><p>'+esc(d.definition)+'</p></div>'+
+ return '<div class="card">'+offNote()+'<div class="sec"><div class="eyebrow">먼저 문제부터</div><h2>'+esc(D.issue)+'</h2><p>'+esc(d.definition)+'</p></div>'+
   '<div class="grid2"><div class="sec"><span class="label">확인 가능한 사실</span>'+dList(d.facts)+'</div><div class="sec"><span class="label">구조적 원인</span>'+dList(d.causes)+'</div></div>'+
   '<div class="sec"><span class="label">이해관계자</span><div class="grid2">'+sh+'</div></div>'+
   '<div class="sec"><span class="label">이 문제를 흔히 이야기하는 틀</span>'+dList(d.frames)+'</div>'+
