@@ -573,7 +573,7 @@ var DB=store.get()||{};
 if(!DB.records)DB.records=[]; if(!DB.canvas)DB.canvas={};
 /* 사고 디버깅 상태 */
 var DSTEPS=['문제 고르기','문제 정의','의식구조','다섯 질문','재해석','작은 실험'];
-function blankD(){return {offline:false,s0:'issue',started:false,pause:false,step:0,issue:'',thought:'',source:'',def:null,pats:null,picked:[],dbg:null,ans:{},rf:null,exp:null,ex:{pred:'',real:'',found:''},busy:false,err:''}}
+function blankD(){return {offline:false,s0:'issue',started:false,pause:false,step:0,issue:'',thought:'',source:'',def:null,pats:null,picked:[],dbg:null,ans:{},rf:null,exp:null,ex:{pred:'',real:'',found:''},belief0:'',belief1:'',dist:'',busy:false,err:''}}
 var D=Object.assign(blankD(),DB.dbg||{});
 D.busy=false;D.pause=false;D.err='';if(!D.ans)D.ans={};if(!D.ex)D.ex={pred:'',real:'',found:''};if(!D.picked)D.picked=[];
 D.started=D.step>0; 
@@ -786,6 +786,7 @@ function v1(){
   '<div class="sec"><h3>이 문제에 대해 평소 드는 생각은요?</h3><p class="hint">한두 문장이면 충분합니다. 맞는지 틀린지 따지지 않고 떠오르는 대로 적어 주세요.</p>'+
   '<textarea id="dThought" placeholder="예: '+esc(ex[0])+'">'+esc(D.thought)+'</textarea>'+
   '<span class="hint">떠오르지 않으면 예시를 눌러 시작해 보세요.</span><div class="chips">'+ex.map(function(x){return '<button type="button" class="chip" data-d-ex="'+esc(x)+'">'+esc(x)+'</button>'}).join('')+'</div></div>'+
+  '<div class="sec"><label class="label" for="dBelief0">이 생각을 지금 얼마나 확신하나요? (0~100%, 비워 두어도 됩니다)</label><div class="row"><input type="number" id="dBelief0" data-d-b="belief0" min="0" max="100" step="5" inputmode="numeric" placeholder="예: 80" value="'+esc(D.belief0)+'" style="max-width:120px"><span class="hint">정답이 없습니다. 지금 느끼는 대로 적어 주세요.</span></div></div>'+
   dErr('define')+
   '<div class="row end"><button class="btn ghost" data-d-act="back">이전</button><button class="btn" data-d-act="think" id="dGo0"'+(ok?'':' disabled')+'>내 생각 살펴보기</button></div></div>';
 }
@@ -836,6 +837,8 @@ function v5(){
   '<div class="sec"><span class="label">예상</span><span class="hint">'+esc(e.predict)+'</span><textarea id="exPred" data-d-fx="pred">'+esc(D.ex.pred)+'</textarea></div>'+
   '<div class="sec"><span class="label">실제 경험</span><span class="hint">'+esc(e.observe)+' (실험을 마친 뒤 적어 주세요)</span><textarea id="exReal" data-d-fx="real">'+esc(D.ex.real)+'</textarea></div>'+
   '<div class="sec"><span class="label">새로운 발견</span><textarea id="exFound" data-d-fx="found">'+esc(D.ex.found)+'</textarea></div>'+
+  '<div class="sec"><span class="label">지금 이 생각을 얼마나 확신하나요? (0~100%, 비워 두어도 됩니다)</span><div class="row"><input type="number" id="dBelief1" data-d-b="belief1" min="0" max="100" step="5" inputmode="numeric" placeholder="예: 60" value="'+esc(D.belief1)+'" style="max-width:120px"><span class="hint">'+(D.belief0!==''?'처음에는 '+esc(D.belief0)+'%였어요. 내려가지 않아도 괜찮습니다.':'내려가지 않아도 괜찮습니다.')+'</span></div></div>'+
+  '<div class="sec"><span class="label">지금 생각과 나 사이에 거리가 느껴지나요?</span><span class="hint">1 = 생각이 곧 나 · 5 = 생각을 한 걸음 떨어져 바라봄</span><div class="chips" role="group" aria-label="생각과 나 사이의 거리">'+[1,2,3,4,5].map(function(n){return '<button type="button" class="chip" data-d-dist="'+n+'" aria-pressed="'+(String(D.dist)===String(n)?'true':'false')+'">'+n+'</button>'}).join('')+'</div></div>'+
   '<div class="row"><button class="btn ghost" data-d-act="copy" id="copyBtn">내 기록 복사</button><button class="btn" data-d-act="saveRec">내 기록에 저장</button><span class="note" id="copyNote" role="status"></span></div>'+
   '<div class="final">내가 지금 생각하고 있는 것이<br>정말 내가 선택한 생각인가?<small>멈추고 · 질문하고 · 구분하고 · 바라보고 · 확장하고 · 선택하고 · 행동한다</small></div>'+
   '<div class="row end"><button class="btn ghost" data-d-act="back">이전</button><button class="btn ghost" data-d-act="restart">처음부터 다시</button></div></div>';
@@ -854,12 +857,13 @@ function dSummary(){
  var r=D.rf||{},e=D.exp||{};
  return ['[잠깐! 진짜?] 나의 사고 디버깅 기록','사회문제: '+D.issue,'내가 처음 가졌던 생각: '+D.thought,
   '재해석: '+(r.after||''),'나의 선택: '+(D.ans.q5||''),'오늘의 실험: '+(e.action||''),
-  '예상: '+D.ex.pred,'실제 경험: '+D.ex.real,'새로운 발견: '+D.ex.found].join('\n');
+  '예상: '+D.ex.pred,'실제 경험: '+D.ex.real,'새로운 발견: '+D.ex.found,
+  (D.belief0!==''?'처음 확신도: '+D.belief0+'%':''),(D.belief1!==''?'지금 확신도: '+D.belief1+'%':''),(D.dist!==''?'생각과 나 사이의 거리: '+D.dist+' / 5':'')].filter(Boolean).join('\n');
 }
 function dRecord(){
  var r=D.rf||{},e=D.exp||{},a=D.ans||{};
  return {id:Date.now().toString(36),date:today(),issue:D.issue,thought:D.thought,source:D.source,mode:'debug',
-  f:{q1:a.q1||'',q2:a.q2||'',q3:a.q3||'',before:r.before||'',after:r.after||'',q5:a.q5||'',keep:r.keepAsking||'',personal:(r.personal||[]).join('\n'),community:(r.community||[]).join('\n'),action:e.action||'',pred:D.ex.pred||'',real:D.ex.real||'',found:D.ex.found||''}};
+  f:{q1:a.q1||'',q2:a.q2||'',q3:a.q3||'',before:r.before||'',after:r.after||'',q5:a.q5||'',keep:r.keepAsking||'',personal:(r.personal||[]).join('\n'),community:(r.community||[]).join('\n'),action:e.action||'',pred:D.ex.pred||'',real:D.ex.real||'',found:D.ex.found||'',belief0:D.belief0,belief1:D.belief1,dist:D.dist}};
 }
 function openDebug(issue,thought,source){D=blankD();D.started=true;D.issue=issue||'';D.thought=thought||'';D.source=source||'';save();setRoute('debug',true)}
 
@@ -1107,6 +1111,7 @@ document.addEventListener('input',function(e){
  else if(t.id==='dIssue'){D.issue=t.value.trim();document.querySelectorAll('[data-d-issue]').forEach(function(b){b.setAttribute('aria-pressed','false')});save();dUpd()}
  else if(t.dataset&&t.dataset.dAns!==undefined){D.ans[t.dataset.dAns]=t.value;save()}
  else if(t.dataset&&t.dataset.dFx!==undefined){D.ex[t.dataset.dFx]=t.value;save()}
+ else if(t.dataset&&t.dataset.dB!==undefined){var bv=t.value===''?'':Math.max(0,Math.min(100,Math.round(Number(t.value))));D[t.dataset.dB]=isNaN(bv)?'':bv;save()}
  else if(t.id==='bkWhere'){bk.w=t.value}
  else if(t.id==='bkQuote'){bk.q=t.value}
  else if(t.id==='bkIssue'){bk.i=t.value;document.querySelectorAll('[data-bkissue]').forEach(function(b){b.setAttribute('aria-pressed','false')})}
@@ -1130,6 +1135,7 @@ function chGo(c){
 document.addEventListener('click',function(e){
  var lk=e.target.closest('a[href^="#/"]');if(lk){e.preventDefault();setRoute(lk.getAttribute('href').slice(2));return}
  var cf=e.target.closest('[data-cf]');if(cf){var fn=pend;pend=null;$('#cf').hidden=true;if(cf.dataset.cf==='y'&&fn)fn();return}
+ var dsb=e.target.closest('[data-d-dist]');if(dsb){D.dist=(String(D.dist)===dsb.dataset.dDist)?'':dsb.dataset.dDist;save();document.querySelectorAll('[data-d-dist]').forEach(function(b){b.setAttribute('aria-pressed',String(String(D.dist)===b.dataset.dDist))});return}
  var el=e.target.closest('[data-d-issue],[data-d-ex],[data-d-pat],[data-d-go],[data-d-act],[data-node],[data-kind],[data-copy],[data-del],[data-resume],[data-ch],[data-bq],[data-bkissue],[data-act],[data-fl],[data-sc],[data-mt],[data-bkch]');
  if(!el)return;var d=el.dataset;
  /* 사고 디버깅 */
