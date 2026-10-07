@@ -181,6 +181,13 @@ ul.plain{margin:0;padding-left:1.1em;display:flex;flex-direction:column;gap:6px}
 footer{margin-top:34px;font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:6px}
 @media(prefers-reduced-motion:reduce){.flow .gap{animation:none}*{scroll-behavior:auto!important}}
 @media print{.top,.btn,.steps{display:none!important}body{background:#fff}}
+.aichat{margin-top:22px;border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:16px;display:flex;flex-direction:column;gap:12px}
+.aichat h3{margin:0;font-size:17px}
+.aimsgs{display:flex;flex-direction:column;gap:10px;max-height:46vh;overflow-y:auto}
+.aim{padding:10px 13px;border-radius:12px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;max-width:92%}
+.aim.me{align-self:flex-end;background:var(--soft);color:var(--fg)}
+.aim.ai{align-self:flex-start;background:var(--bg);border:1px solid var(--line);color:var(--fg)}
+.aichat textarea{min-height:56px}
 </style>
 
 <nav class="top" aria-label="주 메뉴"><div class="in">
@@ -211,6 +218,7 @@ var CONFIG={
   author:'채기석',
   publisher:'퍼플',
   purchaseUrl:'',       // 도서 안내/구매 링크
+  claudeUrl:'',         // (선택) AI 대화가 켜지는 Claude 안의 앱 주소. 일반 화면에서 안내로 보여 줍니다.
   aiEndpoint:''         // (선택) 자체 서버 프록시 URL. POST {prompt} → JSON. 비어 있으면 Claude 화면 안에서만 AI가 켜집니다.
 };
 
@@ -844,6 +852,60 @@ function v5(){
   '<div class="row end"><button class="btn ghost" data-d-act="back">이전</button><button class="btn ghost" data-d-act="restart">처음부터 다시</button></div></div>';
 }
 var DVIEWS=[v0,v1,v2,v3,v4,v5];
+/* ---------- AI와 더 이야기해 보기 (Claude 안에서 열 때만) ---------- */
+var CHAT=[], chatBusy=false, chatAbort=null, chatErr='';
+var CHAT_RULES='이것은 「잠깐! 진짜?」 앱 안의 대화입니다. 사용자가 방금 살펴본 생각을 함께 바라보는 일을 돕습니다. 한 번에 3~5문장 이내로, 되묻는 질문 하나를 중심으로 답합니다. 정답, 훈계, 진단을 하지 않고 긍정적으로 생각하라고 강요하지 않습니다. 사실, 해석, 가능성을 구분하도록 돕습니다. 사용자의 말을 먼저 짧게 받아 준 뒤 질문합니다. 특정 정당이나 진영의 편을 들지 않고, 통계 수치나 연도는 확신이 없으면 쓰지 않습니다. 사용자가 자신을 해치려는 생각이나 깊은 고통을 드러내면 질문을 멈추고, 혼자 견디지 않도록 믿을 수 있는 사람이나 전문가에게 이야기하라고 따뜻하게 권하고, 위급하면 자살예방상담전화 109로 연락하라고 안내합니다. 이 앱은 상담이나 치료를 대신하지 않습니다. 따뜻하고 차분한 한국어로 답합니다.';
+function aiAvailable(){try{return !!(window.claude&&window.claude.use)||!!CONFIG.aiEndpoint}catch(e){return false}}
+function chatCtx(){
+ var a=D.ans||{},r=D.rf||{},e=D.exp||{};
+ return ['[앱 화면 정보 — 사용자가 직접 적은 내용]','사회문제: '+(D.issue||''),'평소 드는 생각: '+(D.thought||''),
+  a.q1?'사실·해석·가능성에 대한 답: '+a.q1:'',a.q2?'숨은 전제에 대한 답: '+a.q2:'',a.q3?'생각의 뿌리에 대한 답: '+a.q3:'',a.q5?'선택하고 싶은 것: '+a.q5:'',
+  r.after?'새로 열어 본 해석: '+r.after:'',e.action?'오늘의 작은 실험: '+e.action:''].filter(Boolean).join('\n');
+}
+function chatHtml(){
+ var msgs=CHAT.map(function(m,i){return '<div class="aim '+(m.role==='user'?'me':'ai')+'"'+(i===CHAT.length-1?' id="aiLast"':'')+'>'+esc(m.content)+'</div>'}).join('');
+ if(!msgs)msgs='<div class="aim ai">여기까지 적어 본 내용을 바탕으로 더 이야기해 볼 수 있어요. 막힌 곳이나 떠오른 생각을 편하게 적어 주세요.</div>';
+ return '<section class="aichat" aria-label="AI와 더 이야기해 보기"><h3>AI와 더 이야기해 보기</h3>'+
+  '<p class="hint">답을 주는 대신 질문으로 함께 생각을 살핍니다. 이 대화는 저장되지 않고, 화면을 닫으면 사라집니다. 대화 내용은 내 Claude 계정으로 처리됩니다.</p>'+
+  '<div class="aimsgs" id="aiMsgs" aria-live="polite">'+msgs+'</div>'+
+  (chatErr?'<p class="note" role="alert" style="color:var(--pause)">'+esc(chatErr)+'</p>':'')+
+  '<textarea id="aiInput" placeholder="예: 그런데 이 생각이 왜 이렇게 자꾸 떠오를까요?" aria-label="AI에게 보낼 말"></textarea>'+
+  '<div class="row end"><button type="button" class="btn ghost sm" data-ai="clear"'+(CHAT.length?'':' disabled')+'>대화 지우기</button><button type="button" class="btn" data-ai="send"'+(chatBusy?' disabled':'')+'>'+(chatBusy?'생각하는 중…':'보내기')+'</button></div></section>';
+}
+function chatPanel(){
+ if(D.step<2)return '';
+ if(aiAvailable())return chatHtml();
+ return CONFIG.claudeUrl?'<section class="aichat"><h3>AI와 더 이야기해 보기</h3><p class="hint">AI 대화는 Claude 계정으로 여는 앱에서 쓸 수 있습니다. 지금 화면에서는 위의 질문들로 충분히 진행됩니다.</p><p><a href="'+esc(CONFIG.claudeUrl)+'" target="_blank" rel="noopener">Claude에서 열기</a></p></section>':'';
+}
+async function chatSend(){
+ var ta=$('#aiInput');if(!ta||chatBusy)return;var text=ta.value.trim();if(!text)return;
+ chatErr='';CHAT.push({role:'user',content:text});CHAT.push({role:'assistant',content:''});chatBusy=true;render();
+ var turns=CHAT.slice(0,-1).slice(-10).map(function(m){return {role:m.role,content:m.content}});
+ while(turns.length&&turns[0].role!=='user')turns.shift();
+ turns[0]={role:'user',content:CHAT_RULES+'\n\n'+chatCtx()+'\n\n[대화 시작]\n'+turns[0].content};
+ try{
+  var out='';
+  if(CONFIG.aiEndpoint){
+   var r=await fetch(CONFIG.aiEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat:turns})});
+   if(!r.ok)throw {code:'fail'};var j=await r.json();out=j.text||'';
+  }else{
+   var sm=await ensureAI();if(!sm)throw {code:'unavailable'};
+   chatAbort=new AbortController();
+   var res=await sm(turns,{cache:false,modelTier:'default',signal:chatAbort.signal,onText:function(o){CHAT[CHAT.length-1].content=o.text;var el=$('#aiLast');if(el)el.textContent=o.text;var bx=$('#aiMsgs');if(bx)bx.scrollTop=bx.scrollHeight}});
+   out=(res&&res.text)||'';
+  }
+  CHAT[CHAT.length-1].content=out||'답을 만들지 못했습니다. 다시 보내 주세요.';
+ }catch(x){
+  CHAT.pop();
+  chatErr=(x&&x.code==='not_granted')?'AI 사용을 허용하지 않아 대화를 시작하지 못했습니다. 위의 질문들로 계속 진행할 수 있습니다.':(x&&x.code==='rate_limited')?'요청이 많아 잠시 쉬고 있습니다. 잠시 뒤 다시 보내 주세요.':(x&&x.code==='cancelled')?'중단되었습니다.':'AI와 연결하지 못했습니다. 잠시 뒤 다시 시도해 주세요.';
+ }
+ chatBusy=false;chatAbort=null;var keep=ta.value;render();
+}
+document.addEventListener('click',function(e){
+ var b=e.target.closest('[data-ai]');if(!b)return;
+ if(b.dataset.ai==='send')chatSend();
+ else if(b.dataset.ai==='clear'){CHAT=[];chatErr='';render()}
+});
 function vDebug(){
  if(!D.started)return vLanding();
  if(D.pause)return vPause();
@@ -851,7 +913,7 @@ function vDebug(){
   var cls=i===D.step?'cur':(i<D.step?'done':'');
   return '<button type="button" class="'+cls+'" data-d-go="'+i+'" aria-label="'+(i+1)+'단계 '+esc(n)+'"'+(i>D.step?' disabled':'')+'></button>';
  }).join('')+'</nav><div class="stepname note" style="margin-bottom:18px">'+(D.step+1)+' / '+DSTEPS.length+'  '+DSTEPS[D.step]+'</div>';
- return '<header class="sec" style="gap:14px;margin-bottom:26px"><div class="eyebrow">사고 디버깅 프로그램</div><h1>잠깐! 진짜?</h1><p class="quote">생각을 바꾸기 전에, 생각을 바라보는 능력이 필요하다.</p>'+flowStrip()+'</header>'+steps+DVIEWS[D.step]();
+ return '<header class="sec" style="gap:14px;margin-bottom:26px"><div class="eyebrow">사고 디버깅 프로그램</div><h1>잠깐! 진짜?</h1><p class="quote">생각을 바꾸기 전에, 생각을 바라보는 능력이 필요하다.</p>'+flowStrip()+'</header>'+steps+DVIEWS[D.step]()+chatPanel();
 }
 function dSummary(){
  var r=D.rf||{},e=D.exp||{};
